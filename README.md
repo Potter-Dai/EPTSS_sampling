@@ -1,2 +1,3 @@
 # EPTSS_sampling
 a new TS sampling method in condensed media.
+The project is being executed...
