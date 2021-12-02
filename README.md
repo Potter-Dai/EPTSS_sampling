@@ -56,3 +56,4 @@ All constraints on the frozen solvent zone are released, and 4 NSPTS trajectorie
 ```bash 
 sh job_split.sh 
 ```
+This is the turtorial of EPTSS sampling in water, another turtorial in enzyme LepI is in prepartation...
