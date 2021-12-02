@@ -1,0 +1,218 @@
+#!/bin/tcsh
+
+
+
+
+# This is the master control program for dynamics, in the form of a Unix Shell Script.
+#
+# Necessary input files:
+# freqinHP - This is the standard output from a Gaussian 98 or 03 frequency calculation using freq=hpmodes.
+# progdyn.conf – This is a file giving a variety of configuration options, called on by many of the subprograms.
+#
+# Optional input:
+# isomernumber - A number in file isomernumber provides a start for numbering runs.
+# detour – A signal file that, by existing, signals the program to do a side calculations
+# nogo – A signal file that, by existing, signals the program to stop between points
+#
+# Programs called:
+# proggenHP - An awk program that starts a trajectory, giving each modeits zero point energy plus random additional excitations depending on thetemperature.
+# prog1stpoint – Awk program that creates the first Gaussian input file foreach run
+# prog2ndpoint – Awk program that creates the second Gaussian input file foreach run
+# progdynb – Creates subsequent Gaussian input files until run is completed,used the awk
+# proganal – A program to analyze the latest point and see if a run is done.
+# randgen – A program that generates random numbers between 0 and 1. Theseare generated all at once and stored in a file for use by proggenHP.
+#
+# Output files
+# isomernumber – A running tab of the run number
+# geoRecord – A record of all the starting positions and velocities.
+# geoPlusVel – Created by proggen, this gives starting position andvelocities for current run.
+# g03.com – Created by prog1stpoint, prog2ndpoint, and progdynb, this is thelatest input
+# file for Gaussian03 for current run and latest point.
+# olddynrun and olderdynrun – files containing the last two outputs fromGaussian, for creation
+# of the next point
+# dyn - A record of all of the Gaussian outputs.
+# dynfollowfile – A short record of the runs and their results.
+# skipstart - A signal file that, by existing, tells progdynstarter that weare in the middle of a run.
+# A number of files starting with 'temp' are created then later erased.
+#!/bin/bash
+#progdynstarterHP, made to use high=precision modes from Gaussian freq output
+#updated to create a random number file temp811 that is used by proggenHP
+#version September 16, 2005, made for Cosmos
+# OUTLINE
+# A. initilize to perform Gaussian jobs and know where we are
+# start loop
+# B. if no file named "skipstart" then generate a new isomer. Get rid ofskipstart to start new isomer.
+#
+# AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+origdir=`pwd`
+export g03root=/usr/local/g03/c02.scsl
+source $g03root/g03/bsd/g03.profile
+rm -f nogo # assume that if someone is starting a job, they want it to go.
+rm -f diagnostics # contains extra info from start of progFS
+while (true)
+do
+# BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+if (test -f skipstart) then
+ echo "skipping start and continuing from previous runs"
+else
+# change from older versions - freqin and most other files are in origdir.
+Advantage is compartmentalization.
+# Also allows separate configurations for separate runs, so we can move to
+using config files.
+# Disadvantage is multiple copies of files.
+ cd $origdir
+ echo 3 > runpointnumber
+ randgen > temp811
+# lets keep the next 8 lines as the only difference between progdynstarter
+and progdynstarterHP
+ awk '/ 1 2 3 4/,/Harmonic frequencies/
+{print}' freqinHP > temp401
+ awk '/Frequencies --/ {print $3;print $4;print $5;print $6;print $7}'
+temp401 > tempfreqs
+ awk '/Reduced masses/ {print $4;print $5;print $6;print $7;print $8}'
+temp401 > tempredmass
+ awk '/Force constants/ {print $4;print $5;print $6;print $7;print $8}'
+temp401 > tempfrc
+ awk '/0/ && ((length($1) < 2) && ($1 < 4)) {print}' temp401 > tempmodes
+ awk '/has atomic number/ {print}' freqinHP > tempmasses
+ awk '/Standard orientation:/,/tional const/ {if ($3==0) print}' freqinHP
+> tempstangeos
+ awk -f proggenHP freqinHP > geoPlusVel
+ if (test -f isomernumber) then
+ cp isomernumber temp533
+ awk 'BEGIN {getline;i=$1+1;print i}' temp533 > isomernumber
+ rm temp533
+ else
+ echo 1 > isomernumber
+ fi
+ rm g03.com
+ awk -f prog1stpoint geoPlusVel > g03.com
+# TO DO - put error checking in prog1stpoint, prog2ndpoint, and progdynb so
+no g03.com unless things are ok
+ if (test -s g03.com) then
+ rm tempfreqs tempredmass tempfrc tempmodes tempstangeos tempmasses
+temp401 temp811
+ cat isomernumber >> geoRecord
+ cat geoPlusVel >> geoRecord
+ cat g03.com
+ rm -f goingwell
+ cd $TMPDIR
+ $g03root/g03/g03 < $origdir/g03.com > $origdir/g03.log
+ cd $origdir
+ grep 'Normal termination' g03.log > goingwell
+ if (test -s goingwell) then
+ cat g03.log >> dyn
+ cp g03.log olderdynrun
+ else
+ break
+ fi
+ else
+ break
+ fi
+ rm g03.com
+ awk -f prog2ndpoint g03.log > g03.com
+ if (test -s g03.com) then
+ rm -f goingwell
+ cd $TMPDIR
+ $g03root/g03/g03 < $origdir/g03.com > $origdir/g03.log
+ cd $origdir
+ grep 'Normal termination' g03.log > goingwell
+ if (test -s goingwell) then
+ cp g03.log olddynrun
+ cat g03.log >> dyn
+# old program progdyn replaced here with commands from progdyn
+ awk '/Input orientation/,/Distance matrix/ {print}' olddynrun >
+temp101
+ awk '/ 0 / {print}' temp101 > old
+ awk '/Input orientation/,/Distance matrix/ {print}' olderdynrun >
+temp102
+ awk '/ 0 / {print}' temp102 > older
+ awk -f progdynb olddynrun > g03.com
+ rm -f temp101 temp102 old older tempchk
+ else
+ break
+ fi
+ else
+ break
+ fi
+# we've just completed a start, so lets skipstart until instructed otherwise
+ echo "skipping start" > skipstart
+fi
+while (true)
+do
+#increment runpointnumber
+ if (test -f runpointnumber) then
+ cp runpointnumber temp533
+ awk 'BEGIN {getline;i=$1+1;print i}' temp533 > runpointnumber
+ rm temp533
+ else
+ echo 4 > runpointnumber
+ fi
+# this loop always starts with a g03.com in place - because of the loss of
+former program progdyn, I
+# may have to worry about how each it is to restart from a bad run
+ rm -f goingwell
+ cd $TMPDIR
+ $g03root/g03/g03 < $origdir/g03.com > $origdir/g03.log
+ cd $origdir
+ grep 'Normal termination' g03.log > goingwell
+ if (test -s goingwell) then
+ cp olddynrun olderdynrun
+ cp g03.log olddynrun
+# old program progdyn replaced here too
+ awk '/Input orientation/,/Distance matrix/ {print}' olddynrun > temp101
+ awk '/ 0 / {print}' temp101 > old
+ awk '/Input orientation/,/Distance matrix/ {print}' olderdynrun >
+temp102
+ awk '/ 0 / {print}' temp102 > older
+ awk -f progdynb olddynrun > g03.com
+ rm -f temp101 temp102 old older tempchk
+# cat g03.log >> dyn
+ else
+ break
+ fi
+# here is a cool link that lets you interupt the dynamics with a short job,
+then
+# it automatically goes back to the dynamics just make the file 'detour' and
+it
+# will delete detour, run run.com, then go back to dynamics
+ if (test -f detour) then
+ rm detour
+ date >> docslog
+ cat run.com >> docslog
+ cp run.log temp.log
+ cd $TMPDIR
+ $g03root/g03/g03 < $origdir/run.com > $origdir/run.log
+ cd $origdir
+ fi
+#stop it all nicely by creating a nogo file
+ if (test -f nogo) then
+ break
+ fi
+#figure out if this isomer is done
+ awk -f proganal g03.log >> dynfollowfile
+ rm -f tempdone
+ awk -f proganal g03.log > temp281
+ awk '/XXXX/ {print}' temp281 > tempdone
+ rm temp281
+ if (test -s tempdone) then
+ rm -f skipstart
+ rm -f olddynrun
+ rm -f olderdynrun
+ rm -f geoPlusVel
+ break
+ fi
+done
+# We've got to break a second time to get out of this loop
+# if we really want to quit. Otherwise, it will start over
+# at the top
+if (test -f nogo) then
+ break
+fi
+if (test -s goingwell) then
+ echo "probably starting a new point"
+else
+ break
+fi
+done
+exit 0
