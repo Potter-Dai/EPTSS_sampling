@@ -56,4 +56,12 @@ All constraints on the frozen solvent zone are released, and 4 NSPTS trajectorie
 ```bash 
 sh job_split.sh 
 ```
+## Step 6. Analysis of the qm/mm trajectory
+Using files as follows to draw the picture.
+```bash
+sh rj2traj.sh &
+sh cal-dist.sh &
+python make_pic.py
+```
+
 This is the turtorial of EPTSS sampling in water, another turtorial in enzyme LepI is in prepartation...
