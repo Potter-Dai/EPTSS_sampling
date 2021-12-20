@@ -1,0 +1,7 @@
+parm ./min.prmtop
+trajin ./FRnc/md_qm_w11.nc
+distance test @5 @6 out ./bond-dist/1.1Bond1.agr
+distance test2 @1 @19 out ./bond-dist/1.1Bond2.agr
+distance test3 @3 @4 out ./bond-dist/1.1Bond3.agr
+run
+quit

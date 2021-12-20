@@ -1,0 +1,6 @@
+parm ./min.prmtop
+trajin ./mdcrd/md_qm_f11.mdcrd
+trajin ./mdcrd/md_qm_r11.mdcrd
+trajout ./FRnc/md_qm_w11.nc
+run
+quit
